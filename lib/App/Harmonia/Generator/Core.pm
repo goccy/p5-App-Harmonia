@@ -575,7 +575,7 @@ use warnings;
 sub import {
     my ($class, @args) = @_;
     $ENV{PLACK_ENV} = 'testing';
-    $ENV{NOHANA_NENGA_DB} = 'Fixture';
+    $ENV{FIXTURE_DB} = 'Fixture';
     $ENV{FIXTURED_DATAS} = join ' ', @args if (@args);
 }
 
