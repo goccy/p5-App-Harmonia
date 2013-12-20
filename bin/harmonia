@@ -1,0 +1,6 @@
+use strict;
+use warnings;
+use App::Harmonia;
+use YAML::XS qw/LoadFile/;
+
+App::Harmonia->new(LoadFile 'account.yaml')->run;
