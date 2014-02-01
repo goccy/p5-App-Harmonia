@@ -93,13 +93,13 @@ sub mapping_template {
     if ($accessor eq 'ACL') {
         $mapping_tmpl = '%s' . $arrow_space . ' => __APP__::Core::ACL->new';
     } else {
-        $mapping_tmpl = '%s' . $arrow_space . ' => $mapping_data->{%s}';
+        $mapping_tmpl = '%s' . $arrow_space . ' => $validated_data->{%s}';
     }
     my $column = $self->schema->{$table_name}{$accessor};
     my $type = $column->{type};
     if ($type eq 'Relation') {
         my $class_name = $column->{className};
-        $mapping_tmpl = '%s' . $arrow_space . ' => make_relation({ search_by => make_pointer(bless { object_id => $mapping_data->{%s}{object_id} }, \'__CLASS__\'), column => \'__COLUMN__\' })';
+        $mapping_tmpl = '%s' . $arrow_space . ' => make_relation({ search_by => make_pointer(bless { object_id => $validated_data->{%s}{object_id} }, \'__CLASS__\'), column => \'__COLUMN__\' })';
         $mapping_tmpl =~ s/__CLASS__/$class_name/;
         $mapping_tmpl =~ s/__COLUMN__/$accessor/;
     }
@@ -129,9 +129,9 @@ my $validation_rule = Data::Validator->new(
 
 sub new {
     my ($class, $mapping_data) = @_;
-    $args = $args->{row_data} if (ref($args) =~ /Fixture/);
-    my $validated_args = $args;
-    #my $validated_args = $validation_rule->validate(%$args);
+    $mapping_data = $mapping_data->{row_data} if (ref($mapping_data) =~ /Fixture/);
+    my $validated_data = $mapping_data;
+    #my $validated_data = $validation_rule->validate(%$mapping_data);
     return $class->SUPER::new({
         __PARAMS__
     });

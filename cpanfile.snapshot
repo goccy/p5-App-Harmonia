@@ -49,29 +49,6 @@ DISTRIBUTIONS
       ExtUtils::MakeMaker 0
       Fcntl 0
       POSIX 0
-  File-Temp-0.2304
-    pathname: D/DA/DAGOLDEN/File-Temp-0.2304.tar.gz
-    provides:
-      File::Temp 0.2304
-    requirements:
-      Carp 0
-      Carp::Heavy 0
-      Cwd 0
-      Exporter 5.57
-      ExtUtils::MakeMaker 6.17
-      Fcntl 1.03
-      File::Path 2.06
-      File::Spec 0.8
-      IO::Handle 0
-      IO::Seekable 0
-      POSIX 0
-      Scalar::Util 0
-      Symbol 0
-      constant 0
-      overload 0
-      parent 0.221
-      strict 0
-      vars 0
   HTML-Form-6.03
     pathname: G/GA/GAAS/HTML-Form-6.03.tar.gz
     provides:
@@ -329,25 +306,6 @@ DISTRIBUTIONS
       MIME::Base64 0
       Test::More 0.60_01
       perl 5.005
-  PathTools-3.40
-    pathname: S/SM/SMUELLER/PathTools-3.40.tar.gz
-    provides:
-      Cwd 3.40
-      File::Spec 3.40
-      File::Spec::Cygwin 3.40
-      File::Spec::Epoc 3.40
-      File::Spec::Functions 3.40
-      File::Spec::Mac 3.40
-      File::Spec::OS2 3.40
-      File::Spec::Unix 3.40
-      File::Spec::VMS 3.40
-      File::Spec::Win32 3.40
-    requirements:
-      Carp 0
-      ExtUtils::MakeMaker 0
-      File::Basename 0
-      Scalar::Util 0
-      Test 0
   Perl6-Slurp-0.051003
     pathname: D/DC/DCONWAY/Perl6-Slurp-0.051003.tar.gz
     provides:
