@@ -51,12 +51,17 @@ sub run {
 
 sub get_schema {
     my ($self) = @_;
+    my $url = PARSE_URL;
+    my $content = decode_entities($self->mech->get($url)->decoded_content(charset => 'utf8'));
+    my ($token_input) = $content =~ /(<input[^>]*name="authenticity_token".*>)/m;
+    my ($authenticity_token) = $token_input =~ /value="(.*)"/m;
     $self->mech->post(PARSE_URL . '/user_session', {
         'user_session[email]'    => $self->account,
-        'user_session[password]' => $self->password
+        'user_session[password]' => $self->password,
+        'authenticity_token'     => $authenticity_token
     });
-    my $url = sprintf(DATA_BROWSER, $self->application);
-    my $content = decode_entities($self->mech->get($url)->decoded_content(charset => 'utf8'));
+    $url = sprintf(DATA_BROWSER, $self->application);
+    $content = decode_entities($self->mech->get($url)->decoded_content(charset => 'utf8'));
     my ($id) = $content =~ /var schemaJson = .*\$\('#(.*)'\)/m;
     my ($json) = $content =~ m|$id.*>(.*)</script>|;
     my $schema = decode_json($json);
