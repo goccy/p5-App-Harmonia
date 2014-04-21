@@ -156,7 +156,7 @@ sub new {
 }
 
 sub make_pointer {
-    my ($self, $object) = @_;
+    my ($object) = @_;
     unless (defined $object->{object_id}) {
         die 'cannot create pointer from unknown object';
     }
@@ -174,12 +174,12 @@ sub make_pointer {
 }
 
 sub make_relation {
-    my ($self, $args) = @_;
-    return __APP__::Relation->new($args);
+    my ($args) = @_;
+    return __APP__::Core::Relation->new($args);
 }
 
 sub make_date {
-    my ($self, $date) = @_;
+    my ($date) = @_;
     return {
         '__type' => 'Date',
         'iso'    => $date

@@ -43,7 +43,7 @@ sub generate {
         open my $fh, '>', "$generate_dirname/$name/Factory.pm";
         print $fh $code;
         close $fh;
-        print $code, "\n";
+        #print $code, "\n";
     }
 }
 

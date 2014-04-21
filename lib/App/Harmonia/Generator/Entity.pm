@@ -5,7 +5,7 @@ use parent 'Class::Accessor::Fast';
 use App::Harmonia;
 use YAML::XS qw/LoadFile/;
 use File::Path 'mkpath';
-use String::CamelCase qw/camelize/;
+use String::CamelCase qw/camelize decamelize/;
 
 __PACKAGE__->mk_accessors(qw/
     schema
@@ -33,25 +33,37 @@ sub generate {
         my $name = camelize $table_name;
         my $tab_space = ' ' x 4;
         my @accessors = keys %{$self->schema->{$table_name}};
-        my $accessors = join "\n" . $tab_space, @accessors;
-        my $max_name_length = $self->max_name_length(\@accessors);
+        my @relation_accessors = grep { $self->__is_relation($table_name, $_) } @accessors;
+        my @excluded_relation_accessors = grep { !$self->__is_relation($table_name, $_) } @accessors;
+        my @all_accessors = (@excluded_relation_accessors, map { ("_$_", "cached_$_"); } @relation_accessors);
+        my $accessors = join "\n" . $tab_space, @all_accessors;
+        my $max_name_length = $self->max_name_length(\@all_accessors);
 
         $code =~ s/__VERSION__/$App::Harmonia::VERSION/;
         $code =~ s/__CLASS__/$name/g;
         $code =~ s/__ACCESSORS__/$accessors/g;
         my $params = join ",\n" . $tab_space x 2, map {
             $self->mapping_template($table_name, $_, $max_name_length);
-        } @accessors;
+        } (@accessors, 'db');
         my $rules  = join ",\n" . $tab_space, map {
             $self->validation_rule($table_name, $_, $max_name_length);
-        } @accessors;
+        } @excluded_relation_accessors;
+        my @extra_modules;
+        my $methods = join "\n", map {
+            $self->relation_method($table_name, $_, \@extra_modules);
+        } @relation_accessors;
+        my $modules = join "\n", map {
+            "use $_;";
+        } @extra_modules;
         $code =~ s/__PARAMS__/$params/g;
         $code =~ s/__RULES__/$rules/g;
+        $code =~ s/__EXTRA_MODULES__/$modules/;
+        $code =~ s/__METHODS__/$methods/;
         $code =~ s/__APP__/$application_name/g;
         open my $fh, '>', "$generate_dirname/$name\.pm";
         print $fh $code;
         close $fh;
-        print $code, "\n";
+        #print $code, "\n";
     }
 }
 
@@ -72,10 +84,10 @@ sub validation_rule {
     my $rule = '';
     my $column = $self->schema->{$table_name}{$accessor};
     my $type = $column->{type};
-    $type = 'Str'  if ($type eq 'String');
-    $type = 'Num'  if ($type eq 'Number');
-    $type = 'Bool' if ($type eq 'Boolean');
-    $type = 'Any'  if ($type eq 'Object');
+    $type = 'Str'      if ($type eq 'String');
+    $type = 'Num'      if ($type eq 'Number');
+    $type = 'Bool'     if ($type eq 'Boolean');
+    $type = 'Any'      if ($type eq 'Object');
     $type = 'HashRef'  if ($type eq 'Date');
     $type = 'HashRef'  if ($type eq 'File');
     $type = 'HashRef'  if ($type eq 'Pointer');
@@ -92,18 +104,56 @@ sub mapping_template {
     my $mapping_tmpl;
     if ($accessor eq 'ACL') {
         $mapping_tmpl = '%s' . $arrow_space . ' => __APP__::Core::ACL->new';
+    } elsif ($accessor eq 'db') {
+        $mapping_tmpl = '%s' . $arrow_space . ' => __APP__::Core::DB->new';
     } else {
         $mapping_tmpl = '%s' . $arrow_space . ' => $validated_data->{%s}';
     }
     my $column = $self->schema->{$table_name}{$accessor};
-    my $type = $column->{type};
-    if ($type eq 'Relation') {
+    if ($self->__is_relation($table_name, $accessor)) {
+        my $name       = camelize($table_name);
         my $class_name = $column->{className};
-        $mapping_tmpl = '%s' . $arrow_space . ' => make_relation({ search_by => make_pointer(bless { object_id => $validated_data->{%s}{object_id} }, \'__CLASS__\'), column => \'__COLUMN__\' })';
+        $mapping_tmpl = '%s' . $arrow_space . ' => make_relation({ search_by => make_pointer(bless { object_id => $validated_data->{object_id} }, \'' . $name . '\'), column => \'__COLUMN__\' })';
         $mapping_tmpl =~ s/__CLASS__/$class_name/;
         $mapping_tmpl =~ s/__COLUMN__/$accessor/;
+        $accessor = '_' . $accessor;
     }
     return sprintf $mapping_tmpl, $accessor, $accessor;
+}
+
+sub relation_method {
+    my ($self, $table_name, $accessor, $extra_modules) = @_;
+    my $column = $self->schema->{$table_name}{$accessor};
+    my $class_name  = $column->{className};
+    my $column_name = decamelize($class_name);
+
+    my $tmpl =<<'METHOD';
+sub __ACCESSOR__ {
+    my $self = shift;
+    return $self->cached___ACCESSOR__ if ($self->cached___ACCESSOR__);
+    my $results = $self->db->search('__COLUMN__', {
+        related_to => $self->___ACCESSOR__
+    });
+    my $blessed_results = [ map {
+        __APP__::Entity::__CLASS__->new($_);
+    } @$results ];
+    $self->cached___ACCESSOR__($blessed_results);
+    return $blessed_results;
+}
+METHOD
+    $tmpl =~ s/__ACCESSOR__/$accessor/g;
+    $tmpl =~ s/__CLASS__/$class_name/g;
+    $tmpl =~ s/__COLUMN__/$column_name/g;
+    push @$extra_modules, '__APP__::Entity::' . $class_name;
+    return $tmpl;
+}
+
+sub __is_relation {
+    my ($self, $table_name, $accessor) = @_;
+    my $column = $self->schema->{$table_name}{$accessor};
+    return 0 unless $column;
+    my $type = $column->{type};
+    return ($type eq 'Relation') ? 1 : 0;
 }
 
 1;
@@ -117,10 +167,13 @@ use warnings;
 use __APP__::Core::ACL;
 use parent qw/Class::Accessor::Fast/;
 use __APP__::Core::Util qw/make_relation make_pointer/;
+use __APP__::Core::DB;
 use Data::Validator;
+__EXTRA_MODULES__
 
 __PACKAGE__->mk_accessors(qw/
     __ACCESSORS__
+    db
 /);
 
 my $validation_rule = Data::Validator->new(
@@ -136,5 +189,7 @@ sub new {
         __PARAMS__
     });
 }
+
+__METHODS__
 
 1;
