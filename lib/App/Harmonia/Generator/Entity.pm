@@ -142,7 +142,7 @@ sub __ACCESSOR__ {
     my $self = shift;
     return $self->cached___ACCESSOR__ if ($self->cached___ACCESSOR__);
     my $result = $self->db->single('__COLUMN__', {
-        object_id => $self->___ACCESSOR__->{object_id}
+        object_id => $self->___ACCESSOR__->{objectId}
     });
     my $blessed_result = __APP__::Entity::__CLASS__->new($result);
     $self->cached___ACCESSOR__($blessed_result);
