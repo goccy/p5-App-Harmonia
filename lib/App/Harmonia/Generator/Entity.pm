@@ -33,9 +33,12 @@ sub generate {
         my $name = camelize $table_name;
         my $tab_space = ' ' x 4;
         my @accessors = keys %{$self->schema->{$table_name}};
+        my @pointer_accessors  = grep { $self->__is_pointer($table_name, $_) } @accessors;
         my @relation_accessors = grep { $self->__is_relation($table_name, $_) } @accessors;
-        my @excluded_relation_accessors = grep { !$self->__is_relation($table_name, $_) } @accessors;
-        my @all_accessors = (@excluded_relation_accessors, map { ("_$_", "cached_$_"); } @relation_accessors);
+        my @excluded_pointer_relation_accessors = grep {
+            !$self->__is_relation($table_name, $_) && !$self->__is_pointer($table_name, $_)
+        } @accessors;
+        my @all_accessors = (@excluded_pointer_relation_accessors, map { ("_$_", "cached_$_"); } (@pointer_accessors, @relation_accessors));
         my $accessors = join "\n" . $tab_space, @all_accessors;
         my $max_name_length = $self->max_name_length(\@all_accessors);
 
@@ -47,18 +50,22 @@ sub generate {
         } (@accessors, 'db');
         my $rules  = join ",\n" . $tab_space, map {
             $self->validation_rule($table_name, $_, $max_name_length);
-        } @excluded_relation_accessors;
+        } @excluded_pointer_relation_accessors;
         my @extra_modules;
-        my $methods = join "\n", map {
+        my $relation_methods = join "\n", map {
             $self->relation_method($table_name, $_, \@extra_modules);
         } @relation_accessors;
+        my $pointer_methods = join "\n", map {
+            $self->pointer_method($table_name, $_, \@extra_modules);
+        } @pointer_accessors;
         my $modules = join "\n", map {
             "use $_;";
         } @extra_modules;
         $code =~ s/__PARAMS__/$params/g;
         $code =~ s/__RULES__/$rules/g;
         $code =~ s/__EXTRA_MODULES__/$modules/;
-        $code =~ s/__METHODS__/$methods/;
+        $code =~ s/__RELATION_METHODS__/$relation_methods/;
+        $code =~ s/__POINTER_METHODS__/$pointer_methods/;
         $code =~ s/__APP__/$application_name/g;
         open my $fh, '>', "$generate_dirname/$name\.pm";
         print $fh $code;
@@ -117,8 +124,36 @@ sub mapping_template {
         $mapping_tmpl =~ s/__CLASS__/$class_name/;
         $mapping_tmpl =~ s/__COLUMN__/$accessor/;
         $accessor = '_' . $accessor;
+    } elsif ($self->__is_pointer($table_name, $accessor)) {
+        $mapping_tmpl = '%s' . $arrow_space . ' => $validated_data->{' . $accessor . '}';
+        $accessor = '_' . $accessor;
     }
     return sprintf $mapping_tmpl, $accessor, $accessor;
+}
+
+sub pointer_method {
+    my ($self, $table_name, $accessor, $extra_modules) = @_;
+    my $column = $self->schema->{$table_name}{$accessor};
+    my $class_name  = $column->{className};
+    my $column_name = decamelize($class_name);
+
+    my $tmpl =<<'METHOD';
+sub __ACCESSOR__ {
+    my $self = shift;
+    return $self->cached___ACCESSOR__ if ($self->cached___ACCESSOR__);
+    my $result = $self->db->single('__COLUMN__', {
+        object_id => $self->___ACCESSOR__->{object_id}
+    });
+    my $blessed_result = __APP__::Entity::__CLASS__->new($result);
+    $self->cached___ACCESSOR__($blessed_result);
+    return $blessed_result;
+}
+METHOD
+    $tmpl =~ s/__ACCESSOR__/$accessor/g;
+    $tmpl =~ s/__CLASS__/$class_name/g;
+    $tmpl =~ s/__COLUMN__/$column_name/g;
+    push @$extra_modules, '__APP__::Entity::' . $class_name;
+    return $tmpl;
 }
 
 sub relation_method {
@@ -156,6 +191,14 @@ sub __is_relation {
     return ($type eq 'Relation') ? 1 : 0;
 }
 
+sub __is_pointer {
+    my ($self, $table_name, $accessor) = @_;
+    my $column = $self->schema->{$table_name}{$accessor};
+    return 0 unless $column;
+    my $type = $column->{type};
+    return ($type eq 'Pointer') ? 1 : 0;
+}
+
 1;
 
 __DATA__
@@ -190,6 +233,7 @@ sub new {
     });
 }
 
-__METHODS__
+__POINTER_METHODS__
+__RELATION_METHODS__
 
 1;
