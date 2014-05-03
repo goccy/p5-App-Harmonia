@@ -136,6 +136,8 @@ sub pointer_method {
     my $column = $self->schema->{$table_name}{$accessor};
     my $class_name  = $column->{className};
     my $column_name = decamelize($class_name);
+    $column_name    =~ s/^_user$/user/;
+    $class_name     =~ s/^_User$/User/;
 
     my $tmpl =<<'METHOD';
 sub __ACCESSOR__ {
@@ -161,6 +163,8 @@ sub relation_method {
     my $column = $self->schema->{$table_name}{$accessor};
     my $class_name  = $column->{className};
     my $column_name = decamelize($class_name);
+    $column_name    =~ s/^_user$/user/;
+    $class_name     =~ s/^_User$/User/;
 
     my $tmpl =<<'METHOD';
 sub __ACCESSOR__ {
