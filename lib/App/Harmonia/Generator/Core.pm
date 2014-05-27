@@ -916,8 +916,7 @@ sub format_requested_hash_object {
 
     my %formatted_params;
     foreach my $opt (keys %$hash_ref) {
-        my $parse_com_opt = $query_options_map->{$opt};
-        next unless $parse_com_opt;
+        my $parse_com_opt = $query_options_map->{$opt} || $opt;
         my $value = $hash_ref->{$opt};
         if (ref($value) =~ /Relation/) {
             $formatted_params{$parse_com_opt} = $value->__raw;
