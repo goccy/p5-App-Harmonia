@@ -148,6 +148,7 @@ our @EXPORT_OK = qw/
     make_pointer
     make_relation
     make_date
+    make_file
 /;
 
 sub new {
@@ -183,6 +184,14 @@ sub make_date {
     return {
         '__type' => 'Date',
         'iso'    => $date
+    };
+}
+
+sub make_file {
+    my ($filename) = @_;
+    return +{
+        '__type' => 'File',
+        'name'   => $filename
     };
 }
 
@@ -682,6 +691,7 @@ use __APP__::Core::Config;
 use __APP__::Core::Logger;
 use __APP__::Core::DB::Engine::ParseCom::RequestBuilder;
 use __APP__::Core::DB::Engine::ParseCom::ResponseBuilder;
+use __APP__::Core::Util qw/make_file/;
 use constant DEFAULT_LIMIT => 1000;
 use Data::Dumper;
 
@@ -732,6 +742,7 @@ sub search {
 
 sub insert {
     my ($self, $table, $params) = @_;
+    $self->__convert_file_request($params);
     return $self->call('POST', $table, $params);
 }
 
@@ -739,7 +750,13 @@ sub update {
     my ($self, $table, $params) = @_;
     return 0 unless $params;
     return 0 unless $params->{object_id};
+    $self->__convert_file_request($params);
     return $self->call('PUT', $table, $params);
+}
+
+sub upload {
+    my ($self, $file) = @_;
+    return $self->call('UPLOAD', 'file', $file);
 }
 
 sub delete {
@@ -753,6 +770,21 @@ sub function {
     my ($self, $function_name, $params) = @_;
     return 0 unless defined $params;
     return $self->call('POST', "functions/$function_name", $params);
+}
+
+sub __convert_file_request {
+    my ($self, $params) = @_;
+    foreach my $key (keys %$params) {
+        my $value = $params->{$key};
+        if (ref($value) =~ /NohanaDeco::Core::File/) {
+            my $response = $self->upload($value);
+            unless ($response->{name} && $response->{url}) {
+                $self->logger->error('[ERROR] upload error');
+                next;
+            }
+            $params->{$key} = make_file($response->{name});
+        }
+    }
 }
 
 sub call {
@@ -969,8 +1001,10 @@ sub new {
 
 sub build {
     my ($self) = @_;
+    my $method = $self->method;
+    $method = 'POST' if ($method eq 'UPLOAD');
     return HTTP::Request->new(
-        $self->method,
+        $method,
         $self->build_url,
         $self->build_header,
         $self->build_body
@@ -990,7 +1024,7 @@ sub build_url {
 
 sub build_header {
     my ($self) = @_;
-    return __APP__::Core::DB::Engine::ParseCom::RequestBuilder::Header->new->build($self->method);
+    return __APP__::Core::DB::Engine::ParseCom::RequestBuilder::Header->new->build($self->method, $self->query_params);
 }
 
 sub build_body {
@@ -1102,7 +1136,7 @@ sub new {
 }
 
 sub build {
-    my ($self, $method) = @_;
+    my ($self, $method, $params) = @_;
     my $app_id         = $__APP__::Core::Config::APPLICATION_ID;
     my $master_key     = $__APP__::Core::Config::MASTER_KEY;
     my $restapi_key    = $__APP__::Core::Config::REST_API_KEY;
@@ -1112,7 +1146,7 @@ sub build {
     my @restapi_key_pair = ('X-Parse-REST-API-Key'   => $restapi_key);
     my @app_id_pair      = ('X-Parse-Application-Id' => $app_id);
     my @session_tk_pair  = ('X-Parse-Session-Token'  => $session_tk);
-    my @content_type     = $self->content_type($method);
+    my @content_type     = $self->content_type($method, $params);
 
     my @header_paramas = ($use_master_key) ? @master_key_pair : @restapi_key_pair;
     push @header_paramas, (@app_id_pair, @session_tk_pair, @content_type);
@@ -1121,9 +1155,14 @@ sub build {
 }
 
 sub content_type {
-    my ($self, $method) = @_;
+    my ($self, $method, $params) = @_;
     my @content_json = ('Content_Type' => 'application/json');
-    return ($method eq 'POST' || $method eq 'PUT') ? @content_json : ();
+    my @content_type = ($method eq 'POST' || $method eq 'PUT') ? @content_json : ();
+    if ($method eq 'UPLOAD') {
+        my $file = $params;
+        @content_type = ('Content_Type' => $file->content_type);
+    }
+    return @content_type;
 }
 
 1;
@@ -1155,6 +1194,7 @@ use constant {
     DEFAULT_LIMIT           => 1000,
     USER_TABLE_NAME         => 'user',
     ROLE_TABLE_NAME         => 'role',
+    FILE_TABLE_NAME         => 'file',
     INSTALLATION_TABLE_NAME => 'installation'
 };
 
@@ -1168,7 +1208,7 @@ sub build {
     my $name = $self->caller_name;
     if ($name =~ /single/ || $name =~ /search/ || $name =~ /count/) {
         return $self->build_for_get;
-    } elsif ($name =~ /update/ || $name =~ /insert/ ||
+    } elsif ($name =~ /update/ || $name =~ /insert/ || $name =~ /upload/ ||
              $name =~ /delete/ || $name =~ /function/) {
         return $self->build_for_other;
     } else {
@@ -1192,6 +1232,10 @@ sub build_for_other {
     if ($name =~ /update/ || $name =~ /delete/) {
         my $object_id = $self->query_params->{object_id};
         $url .= "/$object_id";
+    } elsif ($name =~ /upload/) {
+        my $file     = $self->query_params;
+        my $filename = $file->filename || 'file' . $file->type;
+        $url .= "/$filename";
     }
     return $url;
 }
@@ -1257,6 +1301,7 @@ sub __is_parse_standard_table {
     my ($self, $table) = @_;
     return 1 if ($table eq USER_TABLE_NAME);
     return 1 if ($table eq ROLE_TABLE_NAME);
+    return 1 if ($table eq FILE_TABLE_NAME);
     return 1 if ($table eq INSTALLATION_TABLE_NAME);
     return 0;
 }
@@ -1299,6 +1344,10 @@ sub new {
 
 sub build {
     my ($self) = @_;
+    if ($self->method eq 'UPLOAD') {
+        my $file = $self->query_params;
+        return $file->binary_data;
+    }
     my $formatted_params = format_params($self->query_params);
     replace_key_to_camelcase($formatted_params);
     return encode_json($formatted_params);
