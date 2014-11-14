@@ -434,15 +434,15 @@ sub new {
         user_access_status => {}
     };
     return bless $self, $class unless (defined $user);
-    return bless $self, $class unless (defined $user->{ACL});
-    my $acl = $user->{ACL};
-    my $id  = $user->{objectId};
-    my $role_id = "role:$id\_1";
-    if (defined $acl->{$role_id}) {
-        $self->{role_access_status}->{"$id\_1"} = $acl->{$role_id};
-    }
-    if (defined $acl->{$id}) {
-        $self->{user_access_status}->{$id} = $acl->{$id};
+    return bless $self, $class unless (defined $user->{acl});
+    my $acl = $user->{acl};
+    foreach my $key (keys %$acl) {
+        if ($key =~ /role/) {
+            my ($user_id) = $key =~ /^role:(.+)$/;
+            $self->{role_access_status}->{$user_id} = $acl->{$key};
+        } else {
+            $self->{user_access_status}->{$key} = $acl->{$key};
+        }
     }
     return bless($self, $class);
 }
@@ -470,14 +470,15 @@ sub set_original_acl {
 }
 
 sub set_allow_all_access {
-    my ($self, $user) = @_;
+    my ($self, $user_object_id, $role_object_id) = @_;
     $self->{role_access_status} = +{
-        $user->{objectId} . '_1' => {
+        $role_object_id => {
             read  => \1,
+            write => \1
         }
     };
     $self->{user_access_status} = +{
-        $user->{objectId} => {
+        $user_object_id => {
             read  => \1,
             write => \1
         }
@@ -920,6 +921,7 @@ use strict;
 use warnings;
 use parent qw/Exporter/;
 use String::CamelCase qw/camelize decamelize/;
+use URI::Escape qw/uri_escape/;
 
 my $query_options_map = {
     '<'      => '$lt',
@@ -966,6 +968,8 @@ sub replace_key_to_camelcase {
     foreach my $key (keys %$hashref) {
         next if ($key =~ /^\$/);
         my $camel_case = camelize $key;
+        $camel_case =~ s/\.([A-Z])/".".lc($1)/e;
+        uri_escape($camel_case);
         $camel_case = lcfirst($camel_case) if ($key =~ /^[a-z]/);
         my $value = $hashref->{$key};
         delete $hashref->{$key};

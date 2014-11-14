@@ -110,7 +110,7 @@ sub mapping_template {
     my $arrow_space = ' ' x ($max_name_length - $length);
     my $mapping_tmpl;
     if ($accessor eq 'ACL') {
-        $mapping_tmpl = '%s' . $arrow_space . ' => __APP__::Core::ACL->new';
+        $mapping_tmpl = '%s' . $arrow_space . ' => ($validated_data->{acl}) ? __APP__::Core::ACL->set_original_acl({ACL =>$validated_data->{acl}}) : __APP__::Core::ACL->new';
     } elsif ($accessor eq 'db') {
         $mapping_tmpl = '%s' . $arrow_space . ' => __APP__::Core::DB->new';
     } else {
